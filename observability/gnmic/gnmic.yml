@@ -1,0 +1,45 @@
+# Qui on est pour se connecter aux routeurs
+username: admin
+password: admin
+insecure: true
+log: true
+
+# Les 9 routeurs à surveiller (leurs IPs de gestion)
+targets:
+  172.20.20.11:6030:
+    name: p1
+  172.20.20.12:6030:
+    name: p2
+  172.20.20.21:6030:
+    name: pe1
+  172.20.20.22:6030:
+    name: pe2
+  172.20.20.23:6030:
+    name: pe3
+  172.20.20.31:6030:
+    name: ce1
+  172.20.20.32:6030:
+    name: ce2
+  172.20.20.33:6030:
+    name: ce3
+  172.20.20.34:6030:
+    name: ce4
+
+# Ce qu'on collecte : le trafic des interfaces
+subscriptions:
+  interfaces:
+    paths:
+      - /interfaces/interface/state/counters
+      - /interfaces/interface/state/oper-status
+    mode: stream
+    stream-mode: sample
+    sample-interval: 10s
+    encoding: json_ietf
+
+# Où on envoie les données : port 9804 pour Prometheus
+outputs:
+  prometheus:
+    type: prometheus
+    listen: :9804
+    path: /metrics
+    expiration: 30s

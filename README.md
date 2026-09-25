@@ -1,5 +1,8 @@
 # projet-mpls-l3vpn-G2
 
+# Network
+
+
 ## Jalon 1 — Le lab existe
 
 ### Objectif
@@ -98,3 +101,143 @@ containerlab deploy -t topology-mpls.yml
 * [x] Version EOS relevée
 * [x] Destruction complète du lab
 * [x] Reconstruction complète du lab
+
+
+
+
+
+
+
+# Observability
+
+## Jalon O1 — Collecte de télémétrie gNMI
+
+### Objectif
+
+Déployer un collecteur **gnmic** sur VM Tools qui se connecte aux 9 routeurs Arista via le protocole gNMI et expose les métriques en temps réel sur un endpoint Prometheus.
+
+### Architecture
+
+Routeurs Arista (gNMI :6030) → gnmic (collecteur :9804) → Prometheus → Grafana
+
+
+### Protocole gNMI
+
+gNMI (gRPC Network Management Interface) est le protocole natif d'Arista EOS pour la télémétrie réseau. Il est exposé par défaut sur le **port 6030** de chaque routeur. Rien n'est installé sur les équipements — gnmic est uniquement installé sur la VM Tools.
+
+Le mode choisi est **stream / sample** : les routeurs envoient automatiquement leurs données toutes les **10 secondes**.
+
+### Données collectées
+
+| Chemin | Données |
+| ------ | ------- |
+| `/interfaces/interface/state/counters` | Compteurs de trafic (octets, paquets, erreurs) |
+| `/interfaces/interface/state/oper-status` | État opérationnel des interfaces (up/down) |
+
+
+
+
+### Vérification gNMI — test direct
+
+Vérifier que gNMI répond sur un routeur :
+
+```bash
+gnmic -a 172.20.20.21:6030 -u admin -p admin --insecure capabilities
+```
+
+Consulter les métriques d'interface en direct sur pe1 :
+
+```bash
+gnmic -a 172.20.20.21:6030 -u admin -p admin --insecure \
+  get --path /interfaces/interface/state/counters
+```
+
+### Cibles — Routeurs Arista
+
+| Équipement | Adresse gNMI |
+| ---------- | ------------ |
+| p1  | 172.20.20.11:6030 |
+| p2  | 172.20.20.12:6030 |
+| pe1 | 172.20.20.21:6030 |
+| pe2 | 172.20.20.22:6030 |
+| pe3 | 172.20.20.23:6030 |
+| ce1 | 172.20.20.31:6030 |
+| ce2 | 172.20.20.32:6030 |
+| ce3 | 172.20.20.33:6030 |
+| ce4 | 172.20.20.34:6030 |
+
+### Prérequis réseau
+
+Les routeurs tournent sur la VM Lab (10.200.2.120). Pour que la VM Tools puisse les joindre :
+
+```bash
+sudo ip route add 172.20.20.0/24 via 10.200.2.120
+```
+
+
+
+### Installation de gnmic
+
+```bash
+bash -c "$(curl -sL https://get-gnmic.openconfig.net)"
+gnmic version
+```
+
+Version installée : `0.49.0`
+
+### Configuration
+
+Fichier : `observability/gnmic/gnmic.yml`
+
+### Service systemd
+
+Fichier de service : `observability/systemd/gnmic.service`
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable gnmic
+sudo systemctl start gnmic
+sudo systemctl status gnmic
+```
+
+### Journalisation
+
+```bash
+journalctl -u gnmic -f
+```
+
+### Vérification de l'endpoint
+
+```bash
+curl http://localhost:9804/metrics | grep "in_octets"
+```
+
+Afficher les métriques en temps réel (rafraîchissement toutes les 2 secondes) :
+
+```bash
+watch -n 2 'curl -s http://localhost:9804/metrics | grep "in_octets"'
+```
+
+### Validation
+
+* [x] gnmic installé (v0.49.0)
+* [x] Fichier de configuration versionné (`observability/gnmic/gnmic.yml`)
+* [x] Fichier service versionné (`observability/systemd/gnmic.service`)
+* [x] Route réseau configurée vers 172.20.20.0/24 via VM Lab
+* [x] gNMI activé sur les 9 routeurs Arista
+* [x] Service systemd actif et activé au démarrage
+* [x] Endpoint Prometheus exposé sur `:9804/metrics`
+* [ ] **O2** — Déploiement de Prometheus (Docker Compose)
+* [ ] **O3** — Déploiement de Grafana avec dashboard
+
+---
+
+## Jalon O2 — Stockage avec Prometheus
+
+> 🚧 En cours
+
+---
+
+## Jalon O3 — Visualisation avec Grafana
+
+> 🚧 En cours

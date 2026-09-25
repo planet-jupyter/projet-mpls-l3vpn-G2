@@ -1,0 +1,17 @@
+[Unit]
+Description=gnmic gNMI collector
+After=network.target
+
+[Service]
+Type=simple
+User=NetOps
+WorkingDirectory=/home/NetOps/Tp/projet-mpls-l3vpn-G2/observability/gnmic
+ExecStart=/usr/local/bin/gnmic --config gnmic.yml subscribe
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=gnmic
+
+[Install]
+WantedBy=multi-user.target
