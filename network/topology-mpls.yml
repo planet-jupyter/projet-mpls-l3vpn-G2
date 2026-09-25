@@ -1,0 +1,116 @@
+name: mpls-tp-g2
+
+mgmt:
+  network: mpls-tp
+  ipv4-subnet: 172.20.20.0/24
+
+topology:
+  kinds:
+    ceos:
+      image: ceos:4.36.1F
+    linux:
+      image: alpine:3.20
+      cmd: sleep infinity
+
+  nodes:
+    # --- Cœur ---
+    p1:
+      kind: ceos
+      labels:
+        ansible-group: core
+      mgmt-ipv4: 172.20.20.11
+    p2:
+      kind: ceos
+      labels:
+        ansible-group: core
+      mgmt-ipv4: 172.20.20.12
+
+    # --- PE ---
+    pe1:
+      kind: ceos
+      labels:
+        ansible-group: pe
+      mgmt-ipv4: 172.20.20.21
+    pe2:
+      kind: ceos
+      labels:
+        ansible-group: pe
+      mgmt-ipv4: 172.20.20.22
+    pe3:
+      kind: ceos
+      labels:
+        ansible-group: pe
+      mgmt-ipv4: 172.20.20.23
+
+    # --- CE ---
+    ce1:
+      kind: ceos
+      labels:
+        ansible-group: ce
+      mgmt-ipv4: 172.20.20.31
+    ce2:
+      kind: ceos
+      labels:
+        ansible-group: ce
+      mgmt-ipv4: 172.20.20.32
+    ce3:
+      kind: ceos
+      labels:
+        ansible-group: ce
+      mgmt-ipv4: 172.20.20.33
+    ce4:
+      kind: ceos
+      labels:
+        ansible-group: ce
+      mgmt-ipv4: 172.20.20.34
+
+    # --- Hosts ---
+    host-a1:
+      kind: linux
+      labels:
+        ansible-group: host
+      mgmt-ipv4: 172.20.20.41
+      exec:
+        - ip addr add 192.168.11.10/24 dev eth1
+        - ip route add 192.168.0.0/16 via 192.168.11.1
+    host-a2:
+      kind: linux
+      labels:
+        ansible-group: host
+      mgmt-ipv4: 172.20.20.42
+      exec:
+        - ip addr add 192.168.12.10/24 dev eth1
+        - ip route add 192.168.0.0/16 via 192.168.12.1
+    host-b1:
+      kind: linux
+      labels:
+        ansible-group: host
+      mgmt-ipv4: 172.20.20.43
+      exec:
+        - ip addr add 192.168.21.10/24 dev eth1
+        - ip route add 192.168.0.0/16 via 192.168.21.1
+    host-b2:
+      kind: linux
+      labels:
+        ansible-group: host
+      mgmt-ipv4: 172.20.20.44
+      exec:
+        - ip addr add 192.168.22.10/24 dev eth1
+        - ip route add 192.168.0.0/16 via 192.168.22.1
+
+  links:
+    # Cœur
+    - endpoints: ["p1:eth1",  "p2:eth1"]
+    - endpoints: ["p1:eth2",  "pe1:eth1"]
+    - endpoints: ["p1:eth3",  "pe2:eth1"]
+    - endpoints: ["p2:eth2",  "pe3:eth1"]
+    # PE - CE
+    - endpoints: ["pe1:eth2", "ce1:eth1"]
+    - endpoints: ["pe2:eth2", "ce2:eth1"]
+    - endpoints: ["pe1:eth3", "ce3:eth1"]
+    - endpoints: ["pe3:eth2", "ce4:eth1"]
+    # CE - Host
+    - endpoints: ["ce1:eth2", "host-a1:eth1"]
+    - endpoints: ["ce2:eth2", "host-a2:eth1"]
+    - endpoints: ["ce3:eth2", "host-b1:eth1"]
+    - endpoints: ["ce4:eth2", "host-b2:eth1"]

@@ -1,0 +1,47 @@
+# Containerlab — fichiers générés localement
+
+.clab/
+clab-*/
+*.clab.yml
+
+# Docker / environnement local
+
+.env
+.env.*
+docker-compose.override.yml
+
+# Ansible — fichiers générés
+
+*.retry
+ansible.log
+
+# Python
+
+**pycache**/
+*.py[cod]
+.venv/
+venv/
+
+# Éditeurs / IDE
+
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Fichiers temporaires
+
+*.tmp
+*.temp
+*.swp
+*~
+*.bak
+
+# Logs
+
+*.log
+
+# Secrets / mots de passe
+
+vault-password-file
+secrets.yml
