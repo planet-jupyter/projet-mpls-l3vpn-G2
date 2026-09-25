@@ -227,16 +227,67 @@ watch -n 2 'curl -s http://localhost:9804/metrics | grep "in_octets"'
 * [x] gNMI activé sur les 9 routeurs Arista
 * [x] Service systemd actif et activé au démarrage
 * [x] Endpoint Prometheus exposé sur `:9804/metrics`
-* [ ] **O2** — Déploiement de Prometheus (Docker Compose)
-* [ ] **O3** — Déploiement de Grafana avec dashboard
 
 ---
-
 ## Jalon O2 — Stockage avec Prometheus
 
-> 🚧 En cours
+### Objectif
 
----
+Déployer **Prometheus** via Docker Compose pour scraper les métriques gnmic et les stocker dans le temps.
+
+### Fichiers
+
+docker-compose.yml` 
+prometheus.yml` 
+
+### Démarrage
+
+```bash
+cd observability
+docker compose up -d
+docker ps
+```
+
+### Vérification
+
+Ouvrir : `http://localhost:9090`
+
+Aller dans **Status → Targets** → le target `gnmic` doit être en état **UP**.
+
+```bash
+curl -s "http://localhost:9090/api/v1/query?query=interfaces_interface_state_counters_out_unicast_pkts" \
+  | python3 -m json.tool | grep value
+```
+
+### Requêtes PromQL utiles
+
+> gnmic convertit les chemins gNMI en noms Prometheus en remplaçant `/` et `-` par `_`.  
+> Exemple : `out-unicast-pkts` → `out_unicast_pkts`
+
+| Objectif | Requête |
+|----------|---------|
+| Toutes les interfaces | `interfaces_interface_state_counters_out_unicast_pkts` |
+| Filtrer par interface | `interfaces_interface_state_counters_out_unicast_pkts{interface_name="Management0"}` |
+| Routeurs PE uniquement | `interfaces_interface_state_counters_out_unicast_pkts{source=~"pe.*"}` |
+| Trafic entrant | `interfaces_interface_state_counters_in_unicast_pkts` |
+| Toutes les métriques | `{subscription_name="interfaces"}` |
+
+### Observations
+
+- Interfaces **Ethernet** → `0` : pas de trafic unicast, uniquement du multicast (OSPF, LDP)
+- Interface **Management0** → valeurs croissantes : trafic de gestion actif
+- Légère différence entre un `curl` direct sur le routeur et Prometheus : normal, scrape toutes les 15s
+
+### Validation
+
+* [x] Docker Compose versionné (`observability/docker-compose.yml`)
+* [x] Configuration Prometheus versionnée (`observability/prometheus/prometheus.yml`)
+* [x] Conteneur Prometheus actif (`prom/prometheus:v2.53.0`)
+* [x] Target gnmic en état **UP** dans Prometheus
+* [x] Métriques visibles dans l'interface Graph
+* [x] Données enregistrées dans le temps (courbe visible)
+
+
 
 ## Jalon O3 — Visualisation avec Grafana
 
