@@ -297,7 +297,60 @@ ansible-playbook checkup.yml
 | `ansible/checkup.yml` | Verifie les 4 couches, s'arrete au premier barreau casse |
 
 
+## Jalon J3a — Reproductibilité
 
+### Objectif
+
+Prouver que le lab, détruit intégralement puis reconstruit, revient au même état fonctionnel, sans aucun geste manuel sur un équipement. Aucun nouvel outil : c'est une propriété de J1 (containerlab) et J2 (Ansible).
+
+### Procédure
+
+Destruction complète :
+
+```bash
+containerlab destroy -t topology-mpls.yml --cleanup
+```
+
+Reconstruction complète :
+
+```bash
+containerlab deploy -t topology-mpls.yml --max-workers 2
+```
+
+Rejeu complet de la chaîne Ansible, dans l'ordre (cœur → plan de contrôle VPN → VRF/PE-CE → CE) :
+
+```bash
+cd ansible
+ansible-playbook site.yml
+```
+
+Checkup final :
+
+```bash
+ansible-playbook checkup.yml
+```
+
+### Script de rejeu
+
+L'ensemble (destroy + deploy + attente eAPI + site.yml + checkup.yml) est rejoué en une seule commande, sans étape manuelle entre temps :
+
+```bash
+ bash replay-chain.sh
+```
+
+### Résultat attendu
+
+- Les 13 conteneurs repartent de zéro (`containerlab inspect`).
+- Les 4 playbooks de `site.yml` passent sans intervention manuelle sur un équipement.
+- `checkup.yml` finit vert sur les 4 barreaux : sous-jacent, plan de contrôle, plan de données, trafic.
+- Les pings inter-sites et le test d'étanchéité redonnent le même résultat qu'au premier déploiement.
+
+### Validation
+
+* [ ] `destroy` puis `deploy` joués en direct
+* [ ] Rejeu complet de `site.yml`, sans commande tapée à la main sur un routeur
+* [ ] `checkup.yml` vert sur les 4 barreaux à l'arrivée
+* [ ] Même comportement de trafic qu'au déploiement initial (pings OK/bloqués identiques)
 
 
 
