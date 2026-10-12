@@ -1,0 +1,6 @@
+---
+local_as: 65201
+wan_interface: { name: Ethernet1, ip: 10.100.2.1, prefix: 31 }
+lan_interface: { name: Ethernet2, ip: 192.168.21.1, prefix: 24 }
+pe_neighbor_ip: 10.100.2.0
+lan_network: 192.168.21.0/24

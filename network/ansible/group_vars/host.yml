@@ -1,0 +1,5 @@
+---
+# Les hosts Linux ne font pas d'eAPI : ils ecrasent group_vars/all.yml
+ansible_connection: ssh
+ansible_user: root
+ansible_become: false

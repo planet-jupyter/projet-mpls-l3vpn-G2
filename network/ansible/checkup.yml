@@ -1,0 +1,136 @@
+---
+# Checkup en escalier : un barreau par couche.
+# any_errors_fatal: true fait echouer tout le run des qu'un hote rate
+# une assertion, donc les barreaux suivants ne sont pas joues.
+
+- name: Checkup 1/4 - sous-jacent (OSPF + LDP)
+  hosts: core:pe
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+    - name: Relever les voisins OSPF
+      arista.eos.eos_command:
+        commands: ["show ip ospf neighbor"]
+      register: ospf_out
+
+    - name: Verifier qu'il y a au moins un voisin FULL
+      ansible.builtin.assert:
+        that: "'FULL' in ospf_out.stdout[0]"
+        fail_msg: "OSPF: aucun voisin FULL sur {{ inventory_hostname }}"
+        success_msg: "OSPF OK sur {{ inventory_hostname }}"
+
+    - name: Relever les voisins LDP
+      arista.eos.eos_command:
+        commands: ["show mpls ldp neighbor"]
+      register: ldp_out
+
+    - name: Verifier qu'il y a au moins un voisin LDP
+      ansible.builtin.assert:
+        that: "'State: oper' in ldp_out.stdout[0]"
+        fail_msg: >-
+          LDP indisponible ou aucun voisin sur {{ inventory_hostname }}.
+          Sortie EOS : {{ ldp_out.stdout[0] }}
+        success_msg: "LDP OK sur {{ inventory_hostname }}"
+
+- name: Checkup 2/4 - plan de controle (MP-BGP VPNv4)
+  hosts: pe:clab-mpls-tp-g2-p1
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+    - name: Relever les sessions BGP VPNv4
+      arista.eos.eos_command:
+        commands: ["show bgp vpn-ipv4 summary"]
+      register: bgp_out
+
+    - name: Verifier qu'aucune session n'est Idle ou Active (= pas Established)
+      ansible.builtin.assert:
+        that:
+          - "'Idle' not in bgp_out.stdout[0]"
+          - "'Active' not in bgp_out.stdout[0]"
+        fail_msg: "BGP VPNv4: session non etablie sur {{ inventory_hostname }}"
+        success_msg: "BGP VPNv4 OK sur {{ inventory_hostname }}"
+
+- name: Checkup 3/4 - plan de donnees (LFIB MPLS)
+  hosts: core:pe
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+    - name: Relever la table de transfert MPLS
+      arista.eos.eos_command:
+        commands: ["show mpls route"]
+      register: mpls_lfib
+
+    - name: Verifier que la LFIB contient des labels de transfert
+      ansible.builtin.assert:
+        that: "'via M,' in mpls_lfib.stdout[0]"
+        fail_msg: >-
+          LFIB MPLS vide ou sans label de transfert sur {{ inventory_hostname }}.
+          Sortie EOS : {{ mpls_lfib.stdout[0] }}
+        success_msg: "LFIB MPLS OK sur {{ inventory_hostname }}"
+
+- name: Checkup 3/4 - plan de donnees (routes dans chaque VRF)
+  hosts: pe
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+    - name: Relever la table de routage de chaque VRF
+      arista.eos.eos_command:
+        commands: "show ip route vrf {{ item.name }}"
+      loop: "{{ vrfs }}"
+      loop_control:
+        label: "{{ item.name }}"
+        index_var: idx
+      register: vrf_routes
+
+    - name: Verifier que la VRF n'est pas vide
+      ansible.builtin.assert:
+        that:
+          - "'IP routing not enabled' not in vrf_routes.results[idx].stdout[0]"
+          - >-
+            item.expected_remote_routes
+            | select('in', vrf_routes.results[idx].stdout[0])
+            | list
+            | length == item.expected_remote_routes | length
+        fail_msg: >-
+          VRF {{ item.name }} inactive ou routes distantes manquantes sur
+          {{ inventory_hostname }} (attendu : {{ item.expected_remote_routes }})
+        success_msg: "VRF {{ item.name }} OK sur {{ inventory_hostname }}"
+      loop: "{{ vrfs }}"
+      loop_control:
+        label: "{{ item.name }}"
+        index_var: idx
+
+- name: Checkup 4/4 - trafic de bout en bout
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  any_errors_fatal: true
+  vars:
+    lab: mpls-tp-g2
+    ping_tests:
+      - { source: host-a1, destination: 192.168.12.10, label: TENANT_1 host-a1 -> host-a2, expected: success }
+      - { source: host-a2, destination: 192.168.11.10, label: TENANT_1 host-a2 -> host-a1, expected: success }
+      - { source: host-b1, destination: 192.168.22.10, label: TENANT_2 host-b1 -> host-b2, expected: success }
+      - { source: host-b2, destination: 192.168.21.10, label: TENANT_2 host-b2 -> host-b1, expected: success }
+      - { source: host-a1, destination: 192.168.21.10, label: isolation host-a1 -> host-b1, expected: failure }
+      - { source: host-a1, destination: 192.168.22.10, label: isolation host-a1 -> host-b2, expected: failure }
+      - { source: host-a2, destination: 192.168.21.10, label: isolation host-a2 -> host-b1, expected: failure }
+      - { source: host-a2, destination: 192.168.22.10, label: isolation host-a2 -> host-b2, expected: failure }
+      - { source: host-b1, destination: 192.168.11.10, label: isolation host-b1 -> host-a1, expected: failure }
+      - { source: host-b1, destination: 192.168.12.10, label: isolation host-b1 -> host-a2, expected: failure }
+      - { source: host-b2, destination: 192.168.11.10, label: isolation host-b2 -> host-a1, expected: failure }
+      - { source: host-b2, destination: 192.168.12.10, label: isolation host-b2 -> host-a2, expected: failure }
+  tasks:
+    - name: Verifier les pings inter-sites et l'etancheite des VPN
+      ansible.builtin.command: >-
+        docker exec clab-{{ lab }}-{{ item.source }}
+        ping -c 2 -W 1 {{ item.destination }}
+      loop: "{{ ping_tests }}"
+      loop_control:
+        label: "{{ item.label }}"
+      register: ping_results
+      changed_when: false
+      failed_when: >-
+        (item.expected == 'success' and '0% packet loss' not in ping_results.stdout)
+        or
+        (item.expected == 'failure' and '100% packet loss' not in ping_results.stdout)

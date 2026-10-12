@@ -1,0 +1,6 @@
+---
+loopback_ip: 10.255.0.2
+is_route_reflector: false
+core_interfaces:
+  - { name: Ethernet1, ip: 10.0.0.1, prefix: 31 }   # vers p1
+  - { name: Ethernet2, ip: 10.0.0.6, prefix: 31 }   # vers pe3

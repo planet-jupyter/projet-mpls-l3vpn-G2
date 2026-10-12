@@ -1,0 +1,8 @@
+---
+# Enchaine les 4 couches dans l'ordre.
+# Si une couche echoue (any_errors_fatal), ansible-playbook s'arrete
+# et les couches suivantes ne sont pas jouees.
+- import_playbook: 01-core.yml
+- import_playbook: 02-vpn-control-plane.yml
+- import_playbook: 03-vrf-pe-ce.yml
+- import_playbook: 04-ce.yml

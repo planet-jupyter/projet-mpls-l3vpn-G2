@@ -1,0 +1,62 @@
+---
+- name: plan de controle VPN (MP-BGP VPNv4, RR sur p1)
+  hosts: pe:clab-mpls-tp-g2-p1
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+
+    - name: Router-id BGP
+      arista.eos.eos_config:
+        lines:
+          - "router-id {{ loopback_ip }}"
+        parents: "router bgp {{ bgp_as }}"
+
+    # --- Branche route reflector (p1 seulement) ---
+
+    - name: RR - creer le peer-group PE
+      when: is_route_reflector | default(false)
+      arista.eos.eos_config:
+        lines:
+          - "neighbor PE peer group"
+          - "neighbor PE remote-as {{ bgp_as }}"
+          - "neighbor PE update-source Loopback0"
+          - "neighbor PE send-community extended"
+          - "neighbor PE route-reflector-client"
+        parents: "router bgp {{ bgp_as }}"
+
+    - name: RR - rattacher chaque PE au peer-group
+      when: is_route_reflector | default(false)
+      arista.eos.eos_config:
+        lines:
+          - "neighbor {{ hostvars[item].loopback_ip }} peer group PE"
+        parents: "router bgp {{ bgp_as }}"
+      loop: "{{ groups['pe'] }}"
+
+    - name: RR - activer VPNv4 pour le peer-group
+      when: is_route_reflector | default(false)
+      arista.eos.eos_config:
+        lines:
+          - "neighbor PE activate"
+        parents:
+          - "router bgp {{ bgp_as }}"
+          - "address-family vpn-ipv4"
+
+    # --- Branche PE (pe1, pe2, pe3) ---
+
+    - name: PE - session iBGP vers le RR
+      when: not (is_route_reflector | default(false))
+      arista.eos.eos_config:
+        lines:
+          - "neighbor {{ rr_address }} remote-as {{ bgp_as }}"
+          - "neighbor {{ rr_address }} update-source Loopback0"
+          - "neighbor {{ rr_address }} send-community extended"
+        parents: "router bgp {{ bgp_as }}"
+
+    - name: PE - activer VPNv4 vers le RR
+      when: not (is_route_reflector | default(false))
+      arista.eos.eos_config:
+        lines:
+          - "neighbor {{ rr_address }} activate"
+        parents:
+          - "router bgp {{ bgp_as }}"
+          - "address-family vpn-ipv4"

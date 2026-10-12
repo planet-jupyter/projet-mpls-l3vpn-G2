@@ -1,0 +1,25 @@
+---
+loopback_ip: 10.255.0.11
+core_interfaces:
+  - { name: Ethernet1, ip: 10.0.0.3, prefix: 31 }   # vers p1
+vrfs:
+  - name: TENANT_1
+    rd: "65000:11"
+    rt: "65000:1"
+    interface: Ethernet2
+    ip: 10.100.1.0
+    prefix: 31
+    ce_neighbor_ip: 10.100.1.1
+    ce_as: 65101
+    expected_remote_routes:
+      - 192.168.12.0/24
+  - name: TENANT_2
+    rd: "65000:21"
+    rt: "65000:2"
+    interface: Ethernet3
+    ip: 10.100.2.0
+    prefix: 31
+    ce_neighbor_ip: 10.100.2.1
+    ce_as: 65201
+    expected_remote_routes:
+      - 192.168.22.0/24
