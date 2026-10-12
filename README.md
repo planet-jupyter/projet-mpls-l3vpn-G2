@@ -104,6 +104,202 @@ containerlab deploy -t topology-mpls.yml
 
 
 
+## J2 - Le service tourne
+
+
+### Pre-requis
+
+```bash
+pip install --break-system-packages ansible
+ansible-galaxy collection install -r requirements.yml
+```
+
+L'inventaire n'est PAS ecrit a la main : il est genere par containerlab au
+moment du `deploy`, dans `../clab-mpls-tp-g2/ansible-inventory.yml`. C'est ce
+fichier que `ansible.cfg` pointe.
+
+Verifie apres le deploy que les groupes existent bien :
+
+```bash
+cat ../clab-mpls-tp-g2/ansible-inventory.yml
+```
+
+ les groupes `core`, `pe`, `ce`, `host` (issus des labels
+`ansible-group` du fichier .clab.yml), en plus des groupes automatiques
+`ceos` et `linux`.
+
+### graph ansible
+
+```bash
+ansible-inventory -i ansible-inventory.yml --graph
+```
+### Lancer la chaine complete
+
+```bash
+cd ansible
+ansible-playbook site.yml
+```
+
+Cela joue dans l'ordre : coeur -> plan de controle VPN -> VRF/PE-CE -> CE.
+Si une couche echoue (any_errors_fatal), les couches suivantes ne sont pas
+jouees.
+
+### Lancer une seule couche
+
+```bash
+ansible-playbook 01-core.yml
+```
+
+### Lancer le checkup
+
+```bash
+ansible-playbook checkup.yml
+```
+
+4 barreaux dans l'ordre : sous-jacent (OSPF/LDP) -> plan de controle
+(BGP VPNv4) -> plan de donnees (LFIB MPLS + routes VRF) -> trafic
+(ping inter-sites + test d'etancheite).
+
+Les playbooks activent `ip routing` sur les routeurs P, PE et CE. Sur les
+routeurs P et PE, MPLS doit aussi être activé globalement (`mpls ip`) et sur
+chaque interface coeur (`mpls ip` et `mpls ldp interface`), en plus du
+processus LDP. LDP utilise Loopback0 comme router-id et adresse de transport.
+
+### Vérifier les couches MPLS L3VPN
+
+### Accès au CLI pour un routeur
+
+```bash
+docker exec -it clab-mpls-tp-g2-p2 Cli
+```
+### Accès au CLI pour un host
+
+```bash
+docker exec -it clab-mpls-tp-g2-host-a1 sh
+docker exec -it clab-mpls-tp-g2-host-a2 sh
+docker exec -it clab-mpls-tp-g2-host-b1 sh
+docker exec -it clab-mpls-tp-g2-host-b2 sh
+```
+### Pings entre les hosts
+
+Depuis `host-a1` (`192.168.11.10`) :
+
+```bash
+docker exec clab-mpls-tp-g2-host-a1 ping -c 2 -W 1 192.168.12.10  # host-a2 : OK
+docker exec clab-mpls-tp-g2-host-a1 ping -c 2 -W 1 192.168.21.10  # host-b1 : bloque
+docker exec clab-mpls-tp-g2-host-a1 ping -c 2 -W 1 192.168.22.10  # host-b2 : bloque
+```
+
+Depuis `host-a2` (`192.168.12.10`) :
+
+```bash
+docker exec clab-mpls-tp-g2-host-a2 ping -c 2 -W 1 192.168.11.10  # host-a1 : OK
+docker exec clab-mpls-tp-g2-host-a2 ping -c 2 -W 1 192.168.21.10  # host-b1 : bloque
+docker exec clab-mpls-tp-g2-host-a2 ping -c 2 -W 1 192.168.22.10  # host-b2 : bloque
+```
+
+Depuis `host-b1` (`192.168.21.10`) :
+
+```bash
+docker exec clab-mpls-tp-g2-host-b1 ping -c 2 -W 1 192.168.22.10  # host-b2 : OK
+docker exec clab-mpls-tp-g2-host-b1 ping -c 2 -W 1 192.168.11.10  # host-a1 : bloque
+docker exec clab-mpls-tp-g2-host-b1 ping -c 2 -W 1 192.168.12.10  # host-a2 : bloque
+```
+
+Depuis `host-b2` (`192.168.22.10`) :
+
+```bash
+docker exec clab-mpls-tp-g2-host-b2 ping -c 2 -W 1 192.168.21.10  # host-b1 : OK
+docker exec clab-mpls-tp-g2-host-b2 ping -c 2 -W 1 192.168.11.10  # host-a1 : bloque
+docker exec clab-mpls-tp-g2-host-b2 ping -c 2 -W 1 192.168.12.10  # host-a2 : bloque
+```
+
+### OSPF — P et PE
+
+```bash
+show ip interface brief
+show ip ospf neighbor
+show ip route ospf
+```
+
+### LDP — P et PE
+
+```bash
+show mpls ldp neighbor
+show mpls ldp interface
+show mpls ldp bindings (labels)
+show mpls lfib route (actions)
+```
+
+### MP-BGP VPNv4 — P1 et PE
+
+```bash
+show bgp vpn-ipv4 summary
+show bgp vpn-ipv4
+show bgp vpn-ipv4 detail (labels)
+```
+
+### VRF et routes — PE
+
+```bash
+show ip route vrf TENANT_1
+show ip route vrf TENANT_2
+```
+
+### BGP PE-CE — PE
+
+```bash
+show ip bgp vrf TENANT_1 summary
+show ip bgp vrf TENANT_2 summary
+```
+
+### BGP PE-CE — CE
+
+```bash
+show ip bgp summary
+show ip route bgp
+```
+
+### Transfert MPLS — P
+
+```bash
+show mpls route
+show mpls ldp bindings
+```
+
+### Ping inter-sites — terminal Linux
+
+```bash
+docker exec clab-mpls-tp-g2-host-a1 ping -c 2 192.168.12.10
+docker exec clab-mpls-tp-g2-host-b1 ping -c 2 192.168.22.10
+```
+
+### Vérification complète — dossier `network/ansible`
+
+```bash
+ansible-playbook checkup.yml
+```
+
+### Ce que fait chaque fichier
+
+| Fichier | Role |
+|---|---|
+| `requirements.yml` | Declare la dependance a la collection `arista.eos` |
+| `ansible.cfg` | Pointe vers l'inventaire genere, desactive host_key_checking |
+| `group_vars/all.yml` | Connexion eAPI (httpapi, port 443) et mode privilegie `enable` pour les cEOS |
+| `group_vars/core.yml`, `pe.yml`, `ce.yml`, `host.yml` | Variables communes a un groupe |
+| `host_vars/*.yml` | Ce qui varie par equipement : loopback, interfaces, VRF, RD/RT, AS |
+| `ansible/01-core.yml` | Loopback, interfaces coeur, OSPF, LDP — via `eos_config: lines/parents` |
+| `02-vpn-control-plane.yml` | iBGP VPNv4, p1 en route reflector — via `eos_config: lines/parents` |
+| `03-vrf-pe-ce.yml` | VRF, RD/RT, interface cliente, eBGP PE-CE — via `eos_config: lines/parents` |
+| `ansible/04-ce.yml` | Interfaces + eBGP vers le PE — via `eos_config: lines/parents` |
+| `ansible/site.yml` | Enchaine les 4 couches |
+| `ansible/checkup.yml` | Verifie les 4 couches, s'arrete au premier barreau casse |
+
+
+
+
+
 
 
 
@@ -292,3 +488,7 @@ curl -s "http://localhost:9090/api/v1/query?query=interfaces_interface_state_cou
 ## Jalon O3 — Visualisation avec Grafana
 
 > 🚧 En cours
+
+
+
+
