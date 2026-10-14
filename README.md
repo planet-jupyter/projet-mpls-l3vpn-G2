@@ -354,6 +354,71 @@ L'ensemble (destroy + deploy + attente eAPI + site.yml + checkup.yml) est rejou�
 
 
 
+## Jalon J3b — Idempotence
+
+### Objectif
+
+Prouver que rejouer la chaîne Ansible sur un lab **déjà configuré** ne change rien. Aucun nouvel outil : propriété distincte de J3a, à démontrer et à nommer séparément.
+
+### Procédure
+
+Rejouer la chaîne complète sur le lab déjà configuré, sans détruire ni redéployer :
+
+```bash
+cd ansible
+ansible-playbook site.yml
+```
+
+### Signal mesurable : `changed=0`
+
+À la fin de l'exécution, le `PLAY RECAP` doit afficher `changed=0` sur chaque équipement 
+
+
+
+Ce signal se nomme **l'idempotence** : rejouer la même chaîne sur un état déjà conforme ne produit aucun effet de bord, qu'on la joue une fois ou cent fois.
+
+### Idempotence ≠ conformité
+
+Ce sont deux notions distinctes :
+
+| Notion | Ce qu'elle garantit |
+|---|---|
+| **Idempotence** | Rejouer ne modifie rien (`changed=0`) |
+| **Conformité** | L'équipement correspond exactement aux fichiers versionnés |
+
+Une ligne posée à la main sur un équipement, en dehors des fichiers Ansible, **n'est jamais retirée** par un rejeu : Ansible ne gère que ce qu'il connaît dans ses propres variables, il ne nettoie pas ce qui existe en dehors.
+
+### Démonstration de la distinction
+
+Ajouter une ligne à la main, hors de tout fichier versionné :
+```bash
+    docker exec -it clab-mpls-tp-g2-ce1 Cli
+    enable
+    configure
+    interface Ethernet2
+    description Lien vers le routeur Internet
+    end
+    write
+```
+
+Rejouer la chaîne :
+```bash
+    ansible-playbook site.yml
+```
+Constater que :
+- `changed=0` reste vrai sur ce1 pour les tâches gérées par Ansible → **idempotent**.
+- La ligne manuelle est toujours présente après le rejeu → **non conforme**, car absente de `host_vars/ce1.yml`.
+
+Vérification :
+```bash
+    docker exec clab-mpls-tp-g2-ce1 Cli -c "show running-config interfaces Ethernet2"
+```
+### Validation
+
+* [ ] Second passage complet de `site.yml` sur lab déjà configuré, sans destruction
+* [ ] `changed=0` sur les 9 équipements, signal identifié et nommé (idempotence)
+* [ ] Démonstration qu'une ligne posée à la main n'est pas retirée par un rejeu
+* [ ] Distinction expliquée entre idempotence (rejouer ne change rien) et conformité (l'équipement correspond aux fichiers)
 
 
 
