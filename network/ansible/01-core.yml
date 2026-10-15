@@ -5,54 +5,6 @@
   any_errors_fatal: true
   tasks:
 
-    - name: Activer le routage IPv4
+    - name: Pousser la config coeur (loopback + interfaces + OSPF + LDP)
       arista.eos.eos_config:
-        lines:
-          - ip routing
-
-    - name: Activer MPLS globalement
-      arista.eos.eos_config:
-        lines:
-          - mpls ip
-
-    - name: Configurer la Loopback0
-      arista.eos.eos_config:
-        lines:
-          - "ip address {{ loopback_ip }}/32"
-        parents: "interface Loopback0"
-
-    - name: Configurer chaque interface coeur (IP + LDP)
-      arista.eos.eos_config:
-        lines:
-          - no switchport
-          - "ip address {{ item.ip }}/{{ item.prefix }}"
-          - mpls ip
-          - mpls ldp interface
-        parents: "interface {{ item.name }}"
-      loop: "{{ core_interfaces }}"
-      loop_control:
-        label: "{{ item.name }}"
-
-    - name: Activer OSPF et annoncer la loopback
-      arista.eos.eos_config:
-        lines:
-          - "router-id {{ loopback_ip }}"
-          - "network {{ loopback_ip }}/32 area 0.0.0.0"
-        parents: "router ospf 1"
-
-    - name: Annoncer chaque lien coeur dans OSPF
-      arista.eos.eos_config:
-        lines:
-          - "network {{ item.ip }}/{{ item.prefix }} area 0.0.0.0"
-        parents: "router ospf 1"
-      loop: "{{ core_interfaces }}"
-      loop_control:
-        label: "{{ item.name }}"
-
-    - name: Activer LDP globalement
-      arista.eos.eos_config:
-        lines:
-          - router-id interface Loopback0
-          - transport-address interface Loopback0
-          - no shutdown
-        parents: "mpls ldp"
+        src: templates/core.j2

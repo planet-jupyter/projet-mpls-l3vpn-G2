@@ -1,0 +1,32 @@
+{# Activer le routage IPv4 #}
+ip routing
+!
+{# Activer MPLS globalement #}
+mpls ip
+!
+{# Configurer la Loopback0 #}
+interface Loopback0
+   ip address {{ loopback_ip }}/32
+!
+{# Configurer chaque interface coeur (IP + LDP) #}
+{% for intf in core_interfaces %}
+interface {{ intf.name }}
+   no switchport
+   ip address {{ intf.ip }}/{{ intf.prefix }}
+   mpls ip
+   mpls ldp interface
+!
+{% endfor %}
+{# Activer OSPF et annoncer la loopback, puis chaque lien coeur #}
+router ospf 1
+   router-id {{ loopback_ip }}
+   network {{ loopback_ip }}/32 area 0.0.0.0
+{% for intf in core_interfaces %}
+   network {{ intf.ip }}/{{ intf.prefix }} area 0.0.0.0
+{% endfor %}
+!
+{# Activer LDP globalement #}
+mpls ldp
+   router-id interface Loopback0
+   transport-address interface Loopback0
+   no shutdown

@@ -1,0 +1,17 @@
+ip routing
+!
+
+interface Ethernet1
+   no switchport
+   ip address 10.100.2.1/31
+!
+
+interface Ethernet2
+   no switchport
+   ip address 192.168.21.1/24
+!
+
+router bgp 65201
+   router-id 10.100.2.1
+   neighbor 10.100.2.0 remote-as 65000
+   network 192.168.21.0/24

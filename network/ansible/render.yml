@@ -1,0 +1,8 @@
+---
+- name: Afficher le rendu d'un template sans l'appliquer
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Afficher la configuration rendue
+      ansible.builtin.debug:
+        msg: "{{ lookup('ansible.builtin.template', template_file) }}"

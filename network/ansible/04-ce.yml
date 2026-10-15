@@ -1,33 +1,10 @@
 ---
-- name:  configuration des CE
+- name: configuration des CE
   hosts: ce
   gather_facts: false
   any_errors_fatal: true
   tasks:
 
-    - name: Activer le routage IPv4
+    - name: Pousser la config CE (routage, interfaces, eBGP vers le PE)
       arista.eos.eos_config:
-        lines:
-          - ip routing
-
-    - name: Configurer l'interface WAN du CE (vers le PE)
-      arista.eos.eos_config:
-        lines:
-          - no switchport
-          - "ip address {{ wan_interface.ip }}/{{ wan_interface.prefix }}"
-        parents: "interface {{ wan_interface.name }}"
-
-    - name: Configurer l'interface LAN du CE (vers le host)
-      arista.eos.eos_config:
-        lines:
-          - no switchport
-          - "ip address {{ lan_interface.ip }}/{{ lan_interface.prefix }}"
-        parents: "interface {{ lan_interface.name }}"
-
-    - name: Configurer eBGP vers le PE et annoncer le LAN
-      arista.eos.eos_config:
-        lines:
-          - "router-id {{ wan_interface.ip }}"
-          - "neighbor {{ pe_neighbor_ip }} remote-as {{ pe_as }}"
-          - "network {{ lan_network }}"
-        parents: "router bgp {{ local_as }}"
+        src: templates/ce.j2

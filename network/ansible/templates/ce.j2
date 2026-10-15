@@ -1,0 +1,21 @@
+{# Activer le routage IPv4 #}
+ip routing
+!
+
+{# Configurer l'interface WAN du CE (vers le PE) #}
+interface {{ wan_interface.name }}
+   no switchport
+   ip address {{ wan_interface.ip }}/{{ wan_interface.prefix }}
+!
+
+{# Configurer l'interface LAN du CE (vers le host) #}
+interface {{ lan_interface.name }}
+   no switchport
+   ip address {{ lan_interface.ip }}/{{ lan_interface.prefix }}
+!
+
+{# Configurer eBGP vers le PE et annoncer le LAN #}
+router bgp {{ local_as }}
+   router-id {{ wan_interface.ip }}
+   neighbor {{ pe_neighbor_ip }} remote-as {{ pe_as }}
+   network {{ lan_network }}

@@ -1,59 +1,10 @@
 ---
-- name:  VRF et raccordement PE-CE
+- name: VRF et raccordement PE-CE
   hosts: pe
   gather_facts: false
   any_errors_fatal: true
   tasks:
 
-    - name: Creer les VRF clientes
+    - name: Pousser VRF, interfaces clientes, RD/RT et eBGP PE-CE
       arista.eos.eos_config:
-        lines:
-          - "vrf instance {{ item.name }}"
-      loop: "{{ vrfs }}"
-      loop_control:
-        label: "{{ item.name }}"
-
-    - name: Activer le routage IPv4 dans chaque VRF
-      arista.eos.eos_config:
-        lines:
-          - "ip routing vrf {{ item.name }}"
-      loop: "{{ vrfs }}"
-      loop_control:
-        label: "{{ item.name }}"
-
-    - name: Rattacher l'interface cliente a sa VRF et lui donner une IP
-      arista.eos.eos_config:
-        lines:
-          - no switchport
-          - "vrf {{ item.name }}"
-          - "ip address {{ item.ip }}/{{ item.prefix }}"
-        parents: "interface {{ item.interface }}"
-      loop: "{{ vrfs }}"
-      loop_control:
-        label: "{{ item.name }}"
-
-    - name: Configurer RD, RT et eBGP PE-CE pour chaque VRF
-      arista.eos.eos_config:
-        lines:
-          - "rd {{ item.rd }}"
-          - "route-target import vpn-ipv4 {{ item.rt }}"
-          - "route-target export vpn-ipv4 {{ item.rt }}"
-          - "neighbor {{ item.ce_neighbor_ip }} remote-as {{ item.ce_as }}"
-        parents:
-          - "router bgp {{ bgp_as }}"
-          - "vrf {{ item.name }}"
-      loop: "{{ vrfs }}"
-      loop_control:
-        label: "{{ item.name }}"
-
-    - name: Activer le voisin eBGP dans la famille IPv4 de chaque VRF
-      arista.eos.eos_config:
-        lines:
-          - "neighbor {{ item.ce_neighbor_ip }} activate"
-        parents:
-          - "router bgp {{ bgp_as }}"
-          - "vrf {{ item.name }}"
-          - "address-family ipv4"
-      loop: "{{ vrfs }}"
-      loop_control:
-        label: "{{ item.name }}"
+        src: templates/vrf_pe_ce.j2

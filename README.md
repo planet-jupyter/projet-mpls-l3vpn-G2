@@ -104,7 +104,7 @@ containerlab deploy -t topology-mpls.yml
 
 
 
-## J2 - Le service tourne
+## Jalon 2 - Le service tourne
 
 
 ### Pre-requis
@@ -249,11 +249,13 @@ show ip route vrf TENANT_2
 ### BGP PE-CE — PE
 
 ```bash
-show ip bgp vrf TENANT_1 summary
-show ip bgp vrf TENANT_2 summary
+show ip bgp summary vrf TENANT_1
+show ip bgp summary vrf TENANT_2
+show ip bgp vrf TENANT_1 (table bgp avec next hop)
+show ip bgp vrf TENANT_2 
 ```
 
-### BGP PE-CE — CE
+### E-BGP PE-CE — CE
 
 ```bash
 show ip bgp summary
@@ -421,6 +423,77 @@ Vérification :
 * [ ] Distinction expliquée entre idempotence (rejouer ne change rien) et conformité (l'équipement correspond aux fichiers)
 
 
+## Jalon J4 — La configuration est un artefact
+
+### Objectif
+
+La configuration voulue d'un équipement existe comme un texte qu'on peut regarder, indépendamment de son application. Les couches de J2 (cœur, plan de contrôle VPN, VRF/PE-CE, CE) sont reconstruites avec des gabarits Jinja2 au lieu de `lines`/`parents`, sans toucher au checkup.
+
+### Gabarits Jinja2
+
+La structure de la configuration est portée par 4 fichiers, dans `templates/` :
+
+| Gabarit | Couche | Utilisé par |
+|---|---|---|
+| `core.j2` | Loopback, interfaces cœur, OSPF, LDP | `01-core.yml` |
+| `vpn_control_plane.j2` | iBGP VPNv4, p1 en route reflector | `02-vpn-control-plane.yml` |
+| `vrf_pe.j2` | VRF, RD/RT, interface cliente, eBGP PE-CE | `03-vrf-pe-ce.yml` |
+| `ce.j2` | Interfaces + eBGP vers le PE | `04-ce.yml` |
+
+Chaque playbook est réduit à une seule tâche :
+
+```yaml
+- name: Pousser la config coeur (loopback + interfaces + OSPF + LDP)
+  arista.eos.eos_config:
+    src: templates/core.j2
+```
+
+### Données séparées
+
+Rien ne change ici par rapport à J2 : `group_vars/` et `host_vars/` portent toujours ce qui varie d'un équipement à l'autre (loopback, interfaces, VRF, RD/RT, AS). Les gabarits lisent ces mêmes variables, ils ne les redéfinissent pas.
+
+### Afficher le rendu d'un gabarit sans l'appliquer
+
+Le module `template` (au lieu de `eos_config`) et l'option `-c local` permettent de générer le texte d'une configuration sans ouvrir aucune connexion vers l'équipement.
+
+Exemple pour ce3 :
+
+```bash
+ansible clab-mpls-tp-g2-ce3 -m template -a "src=templates/ce.j2 dest=tmp/ce3.txt" -c local
+```
+
+Lire le résultat :
+
+```bash
+cat /tmp/ce3.txt
+```
+
+Le fichier `/tmp/ce3.txt` est écrit **sur la machine locale**, jamais sur l'équipement. `changed: true` signifie que le fichier local a été créé, pas qu'une config a été poussée sur ce3.
+
+Même principe pour n'importe quel équipement et n'importe quel gabarit, par exemple : pe1
+
+```bash
+ansible clab-mpls-tp-g2-pe1 -m template -a "src=templates/vrf_pe_ce.j2 dest=tmp/pe1-vrf.txt" -c local
+```
+
+### Contrainte forte : checkup.yml non modifié
+
+`checkup.yml` n'a reçu aucune modification depuis J2. Preuve par l'historique Git :
+
+```bash
+git log --follow -- ansible/checkup.yml
+```
+
+Les commits affichés s'arrêtent à J2 ; aucun commit lié aux gabarits de J4 ne touche ce fichier.
+
+### Validation
+
+* [ ] 4 gabarits Jinja2 écrits (`core.j2`, `vpn_control_plane.j2`, `vrf_pe.j2`, `ce.j2`)
+* [ ] Les 4 playbooks (`01` à `04`) utilisent `src:` au lieu de `lines`/`parents`
+* [ ] `host_vars/` et `group_vars/` inchangés depuis J2
+* [ ] Rejeu de `site.yml` sur lab déjà configuré → `changed=0` partout (preuve que les gabarits produisent le même résultat qu'avant)
+* [ ] Rendu d'un gabarit affiché sans application (exemple ce3)
+* [ ] `checkup.yml` inchangé depuis J2, prouvé par `git log`
 
 # Observability
 

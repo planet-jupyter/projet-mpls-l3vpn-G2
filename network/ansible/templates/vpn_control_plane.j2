@@ -1,0 +1,33 @@
+{# Router-id BGP, commun a p1 (RR) et aux PE #}
+router bgp {{ bgp_as }}
+   router-id {{ loopback_ip }}
+{% if is_route_reflector | default(false) %}
+{# --- Branche route reflector (p1 seulement) --- #}
+
+   {# RR - creer le peer-group PE #}
+   neighbor PE peer group
+   neighbor PE remote-as {{ bgp_as }}
+   neighbor PE update-source Loopback0
+   neighbor PE send-community extended
+   neighbor PE route-reflector-client
+   !
+   {# RR - rattacher chaque PE au peer-group #}
+{% for pe in groups['pe'] %}
+   neighbor {{ hostvars[pe].loopback_ip }} peer group PE
+{% endfor %}
+   !
+   {# RR - activer VPNv4 pour le peer-group #}
+   address-family vpn-ipv4
+      neighbor PE activate
+{% else %}
+{# --- Branche PE (pe1, pe2, pe3) --- #}
+
+   {# PE - session iBGP vers le RR #}
+   neighbor {{ rr_address }} remote-as {{ bgp_as }}
+   neighbor {{ rr_address }} update-source Loopback0
+   neighbor {{ rr_address }} send-community extended
+   !
+   {# PE - activer VPNv4 vers le RR #}
+   address-family vpn-ipv4
+      neighbor {{ rr_address }} activate
+{% endif %}

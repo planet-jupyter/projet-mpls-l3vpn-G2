@@ -1,0 +1,38 @@
+{# Creer les VRF clientes #}
+{% for vrf in vrfs %}
+vrf instance {{ vrf.name }}
+!
+{% endfor %}
+
+{# Activer le routage IPv4 dans chaque VRF #}
+{% for vrf in vrfs %}
+ip routing vrf {{ vrf.name }}
+{% endfor %}
+!
+
+{# Rattacher l'interface cliente a sa VRF et lui donner une IP #}
+{% for vrf in vrfs %}
+interface {{ vrf.interface }}
+   no switchport
+   vrf {{ vrf.name }}
+   ip address {{ vrf.ip }}/{{ vrf.prefix }}
+!
+{% endfor %}
+
+{# Configurer RD, RT et eBGP PE-CE pour chaque VRF #}
+router bgp {{ bgp_as }}
+{% for vrf in vrfs %}
+   vrf {{ vrf.name }}
+      rd {{ vrf.rd }}
+      route-target import vpn-ipv4 {{ vrf.rt }}
+      route-target export vpn-ipv4 {{ vrf.rt }}
+      neighbor {{ vrf.ce_neighbor_ip }} remote-as {{ vrf.ce_as }}
+{% endfor %}
+
+{# Activer le voisin eBGP dans la famille IPv4 de chaque VRF #}
+router bgp {{ bgp_as }}
+{% for vrf in vrfs %}
+   vrf {{ vrf.name }}
+      address-family ipv4
+         neighbor {{ vrf.ce_neighbor_ip }} activate
+{% endfor %}

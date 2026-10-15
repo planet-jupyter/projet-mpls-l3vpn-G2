@@ -1,0 +1,39 @@
+vrf instance TENANT_1
+!
+vrf instance TENANT_2
+!
+
+ip routing vrf TENANT_1
+ip routing vrf TENANT_2
+!
+
+interface Ethernet2
+   no switchport
+   vrf TENANT_1
+   ip address 10.100.1.0/31
+!
+interface Ethernet3
+   no switchport
+   vrf TENANT_2
+   ip address 10.100.2.0/31
+!
+
+router bgp 65000
+   vrf TENANT_1
+      rd 65000:11
+      route-target import vpn-ipv4 65000:1
+      route-target export vpn-ipv4 65000:1
+      neighbor 10.100.1.1 remote-as 65101
+   vrf TENANT_2
+      rd 65000:21
+      route-target import vpn-ipv4 65000:2
+      route-target export vpn-ipv4 65000:2
+      neighbor 10.100.2.1 remote-as 65201
+
+router bgp 65000
+   vrf TENANT_1
+      address-family ipv4
+         neighbor 10.100.1.1 activate
+   vrf TENANT_2
+      address-family ipv4
+         neighbor 10.100.2.1 activate
