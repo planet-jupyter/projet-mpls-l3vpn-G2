@@ -996,3 +996,112 @@ Ouvrir `http://localhost:3000` → les valeurs affichées dans les panels corres
 * [x] État des interfaces UP/DOWN avec couleurs (event-strings processor gnmic)
 * [x] Expérience 1 : test de panne via `gnmic set` — prédiction écrite + mesure + DOWN:2 expliqué
 * [x] Expérience 2 : test du chemin PromQL — chaque commande avec son utilité
+
+
+
+
+
+# Scalabilité
+
+## Pourquoi c'est simple avec cette architecture
+
+Depuis J4, toute la configuration vient de deux sources séparées :
+
+- **La structure** (les gabarits `.j2`) : ne décrit jamais un équipement précis, seulement des boucles (`{% for %}`) sur des listes.
+- **Les données** (`host_vars/`, `group_vars/`) : décrivent chaque équipement.
+
+Ajouter un site ou changer un LAN est donc, dans l'immense majorité des cas, **un changement de données, pas de structure**. Les gabarits, les playbooks (`01` à `04`) et le checkup ne sont jamais touchés.
+
+---
+
+## Cas 1 — Changer un LAN existant
+
+Exemple : le LAN de host-a1 passe de `192.168.11.0/24` à `192.168.13.0/24`.
+
+**Fichiers à modifier**
+
+1. `host_vars/ce1.yml` :
+```yaml
+   lan_interface: { name: Ethernet2, ip: 192.168.13.1, prefix: 24 }
+   lan_network: 192.168.13.0/24
+```
+2. Le fichier de topologie (`.clab.yml`), uniquement la partie `exec:` de `host-a1` :
+```yaml
+   exec:
+     - ip addr add 192.168.13.10/24 dev eth1
+     - ip route add 192.168.0.0/16 via 192.168.13.1
+```
+
+**Commandes**
+
+```bash
+containerlab deploy -t topology-mpls.yml --reconfigure   # applique le nouvel exec: sur host-a1
+cd ansible
+ansible-playbook site.yml                                 # pousse le nouveau LAN sur ce1 uniquement
+ansible-playbook checkup.yml
+```
+
+**Ce qui n'est pas touché** : p1, p2, pe1, pe2, pe3, et les 3 autres CE. Seule la tâche BGP de ce1 (`network {{ lan_network }}`) change de valeur ; tous les autres `changed=0` restent à 0.
+
+---
+
+## Cas 2 — Ajouter un site sur un PE existant
+
+Exemple : une 3e agence de la filiale A, raccordée à pe1 (qui a déjà une interface libre).
+
+**Fichiers à modifier**
+
+1. Le fichier de topologie : ajouter un nœud `ce5`, un nœud `host-a3`, et leurs liens (`pe1:eth4 ↔ ce5:eth1`, `ce5:eth2 ↔ host-a3:eth1`).
+2. `host_vars/pe1.yml` : ajouter une entrée dans `vrfs` si c'est un nouveau VRF, ou rien si le site rejoint TENANT_1 existant (dans ce cas, seul un nouveau lien PE–CE est nécessaire, pas une nouvelle VRF).
+3. `host_vars/ce5.yml` : nouveau fichier, sur le modèle de `ce1.yml`.
+
+**Commandes**
+
+```bash
+containerlab deploy -t topology-mpls.yml --reconfigure
+cd ansible
+ansible-playbook site.yml
+ansible-playbook checkup.yml
+```
+
+**Ce qui n'est pas touché** : les gabarits (la boucle `{% for vrf in vrfs %}` absorbe automatiquement la nouvelle entrée), les 3 autres PE, le cœur.
+
+---
+
+## Cas 3 — Ajouter un site avec un nouveau PE
+
+Exemple : une filiale ouvre un site dans une ville sans PE à proximité.
+
+**Fichiers à modifier**
+
+1. Le fichier de topologie : ajouter `pe4`, son lien vers un P existant, et son CE/host.
+2. `group_vars/pe.yml` s'applique automatiquement à `pe4` (label `ansible-group: pe`).
+3. `host_vars/pe4.yml` : nouveau fichier (loopback, `core_interfaces`, `vrfs`).
+
+**Commandes** — identiques au cas 2.
+
+**Ce qui n'est pas touché** : les gabarits, les 3 autres PE. OSPF découvre pe4 automatiquement dès que son lien est annoncé ; aucune ligne à ajouter à la main sur p1 ou p2.
+
+---
+
+## Limite honnête du PoC virtuel
+
+Dans containerlab, ajouter un nœud à la topologie nécessite de relancer le `deploy` sur l'ensemble du lab (`--reconfigure`), ce qui redémarre tous les conteneurs, pas seulement le nouveau. **Ce n'est pas transparent pour les collaborateurs dans ce PoC virtuel.**
+
+Sur du matériel Arista réel, ce point disparaît : un nouveau PE ou CE est câblé et démarré indépendamment, puis `ansible-playbook site.yml` ne pousse de nouvelles lignes que sur les équipements concernés (les autres restent à `changed=0`, comme le prouve l'idempotence de J3b). OSPF et LDP découvrent le nouveau voisin dès que son interface est up, sans toucher aux routeurs déjà en place. C'est ce comportement réel que le PoC démontre au niveau de la configuration, même si le redémarrage des conteneurs est une contrainte propre à l'environnement de test.
+
+## Temps de déploiement
+
+Un `deploy` complet (13 conteneurs) + la chaîne Ansible prend normalement moins des 20 minutes exigées par le DSI. À mesurer et noter précisément lors d'une démonstration, par exemple avec :
+
+```bash
+time ./replay-chain.sh
+```
+
+## Validation
+
+* [ ] Changement de LAN démontré : modification de 2 fichiers seulement (`host_vars` + `exec:` topologie)
+* [ ] Ajout de site sur un PE existant démontré
+* [ ] Ajout de site avec nouveau PE démontré
+* [ ] Aucun gabarit ni playbook modifié dans les 3 cas
+* [ ] Temps de déploiement mesuré et sous les 20 minutes
