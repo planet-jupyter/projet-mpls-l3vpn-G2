@@ -6,3 +6,13 @@ services:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
     network_mode: host
     restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: grafana
+    network_mode: host
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    restart: unless-stopped

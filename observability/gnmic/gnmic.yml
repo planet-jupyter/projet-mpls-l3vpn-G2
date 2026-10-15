@@ -31,15 +31,33 @@ subscriptions:
     paths:
       - /interfaces/interface/state/counters
       - /interfaces/interface/state/oper-status
+      - /interfaces/interface/subinterfaces/subinterface/ipv4/addresses/address/state
     mode: stream
     stream-mode: sample
     sample-interval: 10s
     encoding: json_ietf
 
 # Où on envoie les données : port 9804 pour Prometheus
+processors:
+  oper-status-to-int:
+    event-strings:
+      value-names:
+        - ".*oper.status.*"
+      transforms:
+        - replace:
+            apply-on: value
+            old: "UP"
+            new: "1"
+        - replace:
+            apply-on: value
+            old: "DOWN"
+            new: "0"
+
 outputs:
   prometheus:
     type: prometheus
     listen: :9804
     path: /metrics
     expiration: 30s
+    event-processors:
+      - oper-status-to-int
